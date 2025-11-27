@@ -2,6 +2,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE EmptyDataDeriving #-}
+{-# LANGUAGE EmptyCase #-}
 
 -- | Haskell module declaration
 module Main where
@@ -31,19 +35,35 @@ data FullCharacter = FullCharacter
   , _strength      :: Int
   } deriving (Show, Eq)
 
-data Model
-  = NewCharacter CharacterOutline
-  | CharacterInCreation FullCharacter
-  | CreatedCharacter FullCharacter
-  deriving (Show, Eq)
+data Model a where
+  NewCharacter :: CharacterOutline -> Model NewCharacterAction
+  CharacterInCreation :: FullCharacter -> Model CharacterInCreationAction
+  CreatedCharacter :: FullCharacter -> Model FinalizedCharacterAction
 
--- | Sum type for application events
-data Action
+instance Show (Model a) where
+  show (NewCharacter char)          = "NewCharacter " ++ show char
+  show (CharacterInCreation char)   = "CharacterInCreation " ++ show char
+  show (CreatedCharacter char)      = "CreatedCharacter " ++ show char
+
+instance Eq (Model a) where
+  (NewCharacter char1)        == (NewCharacter char2)        = char1 == char2
+  (CharacterInCreation char1) == (CharacterInCreation char2) = char1 == char2
+  (CreatedCharacter char1)    == (CreatedCharacter char2)    = char1 == char2
+  _                           == _                           = False
+
+-- | Sum types for application events
+data NewCharacterAction
   = SetClass String
   | ConfirmClass
-  | IncrementStrength
+  deriving (Show, Eq)
+
+data CharacterInCreationAction
+  = IncrementStrength
   | DecrementStrength
   | FinalizeCharacter
+  deriving (Show, Eq)
+
+data FinalizedCharacterAction
   deriving (Show, Eq)
 
 #ifndef ghcjs_HOST_OS
@@ -68,27 +88,24 @@ main = runApp $ startApp App {..}
     logLevel = Off                              -- used during prerendering to see if the VDOM and DOM are in sync (only used with `miso` function)
 
 -- | Updates model, optionally introduces side effects
-updateModel :: Action -> Model -> Effect Action Model
-updateModel (SetClass cls) m = noEff (case m of
-    NewCharacter char -> NewCharacter (char { _class = cls })
-    x                 -> x)
-updateModel ConfirmClass m = noEff (case m of
-    NewCharacter char -> CharacterInCreation (FullCharacter { _selectedClass = _class char
-                                                            , _strength      = 5
-                                                            })
-    x                 -> x)
-updateModel IncrementStrength m = noEff (case m of
-    CharacterInCreation char -> CharacterInCreation (char { _strength = _strength char + 1 })
-    x                        -> x)
-updateModel DecrementStrength m = noEff (case m of
-    CharacterInCreation char -> CharacterInCreation (char { _strength = _strength char - 1 })
-    x                        -> x)
-updateModel FinalizeCharacter m = noEff (case m of
-    CharacterInCreation char -> CreatedCharacter char
-    x                        -> x)
+updateModel :: Model action -> action -> Effect action (Model action) -- TODO: resulting model can have different action type
+updateModel (NewCharacter char) a = noEff (case a of
+    SetClass cls -> NewCharacter (char { _class = cls })
+    ConfirmClass -> NewCharacter char
+    -- ConfirmClass -> CharacterInCreation (FullCharacter { _selectedClass = _class char
+    --                                                    , _strength      = 5
+    --                                                    })
+    )
+updateModel (CharacterInCreation char)  a = noEff (case a of
+    IncrementStrength -> CharacterInCreation (char { _strength = _strength char + 1 })
+    DecrementStrength -> CharacterInCreation (char { _strength = _strength char - 1 })
+    FinalizeCharacter -> CharacterInCreation char
+    -- FinalizeCharacter -> CreatedCharacter char
+    )
+updateModel (CreatedCharacter char) a = noEff (case a of)
 
 -- | Constructs a virtual DOM from a model
-viewModel :: Model -> View Action
+viewModel :: Model action -> View action
 viewModel x =
   div_
     [ class_ "character-creator"

@@ -7,6 +7,9 @@
 -- Stability   :  experimental
 -- Portability :  non-portable
 ----------------------------------------------------------------------------
+-- | Haskell language pragma
+{-# LANGUAGE RankNTypes #-}
+
 module Miso.Types
   ( App (..)
   , LogLevel (..)
@@ -37,20 +40,20 @@ import           Miso.Html.Types (View)
 import           Miso.String
 
 -- | Application entry point
-data App model action = App
-  { model :: model
+data App model currentModelAction = App
+  { model :: model currentModelAction
   -- ^ initial model
-  , update :: action -> model -> Effect action model
+  , update :: forall action. model action -> action -> Effect action (model action) -- TODO: resulting model can have different action type
   -- ^ Function to update model, optionally providing effects.
   --   See the 'Transition' monad for succinctly expressing model transitions.
-  , view :: model -> View action
+  , view :: forall action. model action -> View action
   -- ^ Function to draw `View`
-  , subs :: [ Sub action ]
+  , subs :: [ Sub currentModelAction ]
   -- ^ List of subscriptions to run during application lifetime
   , events :: M.Map MisoString Bool
   -- ^ List of delegated events that the body element will listen for.
   --   You can start with 'Miso.Event.Types.defaultEvents' and modify as needed.
-  , initialAction :: action
+  , initialAction :: currentModelAction
   -- ^ Initial action that is run after the application has loaded
   , mountPoint :: Maybe MisoString
   -- ^ Id of the root element for DOM diff. If 'Nothing' is provided, the entire document body is used as a mount point.

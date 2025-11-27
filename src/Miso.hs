@@ -41,6 +41,7 @@ import           Control.Concurrent
 import           Control.Monad
 import           Control.Monad.IO.Class
 import           Data.IORef
+import           Data.Kind                     (Type)
 import           Data.List
 import           Data.Sequence                 ((|>))
 import qualified Data.Sequence                 as S
@@ -78,9 +79,9 @@ import           Miso.WebSocket
 
 -- | Helper function to abstract out common functionality between `startApp` and `miso`
 common
-  :: Eq model
+  :: Eq (model action)
   => App model action
-  -> model
+  -> model action
   -> (Sink action -> JSM (IORef VTree))
   -> JSM ()
 common App {..} m getView = do
@@ -143,7 +144,7 @@ common App {..} m getView = do
 
 -- | Runs an isomorphic miso application.
 -- Assumes the pre-rendered DOM is already present
-miso :: Eq model => (URI -> App model action) -> JSM ()
+miso :: Eq (model action) => (URI -> App model action) -> JSM ()
 miso f = do
   app@App {..} <- f <$> getCurrentURI
   common app model $ \writeEvent -> do
@@ -167,7 +168,7 @@ sink :: Sink action
 sink = unsafePerformIO (readIORef sinkRef)
 
 -- | Runs a miso application
-startApp :: Eq model => App model action -> JSM ()
+startApp :: Eq (model action) => App model action -> JSM ()
 startApp app@App {..} =
   common app model $ \writeEvent -> do
     let initialView = view model
@@ -178,10 +179,10 @@ startApp app@App {..} =
 -- | Helper
 foldEffects
   :: Sink action
-  -> (action -> model -> Effect action model)
+  -> (model -> action -> Effect action model)
   -> Acc model -> action -> Acc model
 foldEffects snk update = \(Acc model as) action ->
-  case update action model of
+  case update model action of
     Effect newModel effs -> Acc newModel newAs
       where
         newAs = as >> do
