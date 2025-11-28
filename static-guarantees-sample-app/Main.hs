@@ -1,11 +1,11 @@
 -- | Haskell language pragma
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE CPP               #-}
+{-# LANGUAGE EmptyCase         #-}
 {-# LANGUAGE EmptyDataDeriving #-}
-{-# LANGUAGE EmptyCase #-}
+{-# LANGUAGE GADTs             #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes        #-}
+{-# LANGUAGE RecordWildCards   #-}
 
 -- | Haskell module declaration
 module Main where
@@ -23,7 +23,8 @@ import           Network.WebSockets
 import           Control.Monad.IO.Class
 
 -- | Other imports
-import Data.Maybe (catMaybes)
+import           Data.Kind                        (Type)
+import           Data.Maybe                       (catMaybes)
 
 -- | Type synonym for an application model
 newtype CharacterOutline = CharacterOutline
@@ -41,15 +42,14 @@ data Model a where
   CreatedCharacter :: FullCharacter -> Model FinalizedCharacterAction
 
 instance Show (Model a) where
-  show (NewCharacter char)          = "NewCharacter " ++ show char
-  show (CharacterInCreation char)   = "CharacterInCreation " ++ show char
-  show (CreatedCharacter char)      = "CreatedCharacter " ++ show char
+  show (NewCharacter char)        = "NewCharacter " ++ show char
+  show (CharacterInCreation char) = "CharacterInCreation " ++ show char
+  show (CreatedCharacter char)    = "CreatedCharacter " ++ show char
 
 instance Eq (Model a) where
   (NewCharacter char1)        == (NewCharacter char2)        = char1 == char2
   (CharacterInCreation char1) == (CharacterInCreation char2) = char1 == char2
   (CreatedCharacter char1)    == (CreatedCharacter char2)    = char1 == char2
-  _                           == _                           = False
 
 -- | Sum types for application events
 data NewCharacterAction
@@ -88,19 +88,17 @@ main = runApp $ startApp App {..}
     logLevel = Off                              -- used during prerendering to see if the VDOM and DOM are in sync (only used with `miso` function)
 
 -- | Updates model, optionally introduces side effects
-updateModel :: Model action -> action -> Effect action (Model action) -- TODO: resulting model can have different action type
+updateModel :: Model action -> action -> Effect action (AnyModel Model)
 updateModel (NewCharacter char) a = noEff (case a of
-    SetClass cls -> NewCharacter (char { _class = cls })
-    ConfirmClass -> NewCharacter char
-    -- ConfirmClass -> CharacterInCreation (FullCharacter { _selectedClass = _class char
-    --                                                    , _strength      = 5
-    --                                                    })
+    SetClass cls -> AnyModel (NewCharacter (char { _class = cls }))
+    ConfirmClass -> AnyModel (CharacterInCreation (FullCharacter { _selectedClass = _class char
+                                                                 , _strength      = 5
+                                                                 }))
     )
 updateModel (CharacterInCreation char)  a = noEff (case a of
-    IncrementStrength -> CharacterInCreation (char { _strength = _strength char + 1 })
-    DecrementStrength -> CharacterInCreation (char { _strength = _strength char - 1 })
-    FinalizeCharacter -> CharacterInCreation char
-    -- FinalizeCharacter -> CreatedCharacter char
+    IncrementStrength -> AnyModel (CharacterInCreation (char { _strength = _strength char + 1 }))
+    DecrementStrength -> AnyModel (CharacterInCreation (char { _strength = _strength char - 1 }))
+    FinalizeCharacter -> AnyModel (CreatedCharacter char)
     )
 updateModel (CreatedCharacter char) a = noEff (case a of)
 

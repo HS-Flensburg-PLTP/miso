@@ -9,9 +9,11 @@
 ----------------------------------------------------------------------------
 -- | Haskell language pragma
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE GADTs #-}
 
 module Miso.Types
   ( App (..)
+  , AnyModel (..)
   , LogLevel (..)
   , Effect
   , Sub
@@ -32,7 +34,7 @@ import           Control.Monad.Trans.Class (lift)
 import           Control.Monad.Trans.State.Strict (StateT(StateT), execStateT, mapStateT)
 import           Control.Monad.Trans.Writer.Strict (WriterT(WriterT), Writer, runWriter, tell, mapWriter)
 import           Data.Bifunctor (second)
-import           Data.Foldable (Foldable, for_)
+import           Data.Foldable (for_)
 import qualified Data.Map as M
 import           Miso.Effect
 import           Miso.FFI (JSM)
@@ -43,7 +45,7 @@ import           Miso.String
 data App model currentModelAction = App
   { model :: model currentModelAction
   -- ^ initial model
-  , update :: forall action. model action -> action -> Effect action (model action) -- TODO: resulting model can have different action type
+  , update :: forall action. model action -> action -> Effect action (AnyModel model)
   -- ^ Function to update model, optionally providing effects.
   --   See the 'Transition' monad for succinctly expressing model transitions.
   , view :: forall action. model action -> View action
@@ -60,6 +62,10 @@ data App model currentModelAction = App
   , logLevel :: LogLevel
   -- ^ Display warning messages when prerendering if the DOM and VDOM are not in sync.
   }
+
+-- | A wrapper to hold any model type
+data AnyModel m where
+  AnyModel :: m a -> AnyModel m
 
 -- | Optional Logging for debugging miso internals (useful to see if prerendering is successful)
 data LogLevel
@@ -131,7 +137,7 @@ scheduleIO ioAction = scheduleSub $ \sink -> ioAction >>= liftIO . sink
 -- This is handy for scheduling IO computations where you don't care
 -- about their results or when they complete.
 scheduleIO_ :: JSM () -> Transition action model ()
-scheduleIO_ ioAction = scheduleSub $ \_sink -> ioAction
+scheduleIO_ ioAction = scheduleSub $ const ioAction
 
 -- | Like `scheduleIO_` but generalized to any instance of `Foldable`
 --

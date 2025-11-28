@@ -5,6 +5,7 @@
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE KindSignatures      #-}
+{-# LANGUAGE RankNTypes          #-}
 
 #ifdef IOS
 #else
@@ -41,7 +42,6 @@ import           Control.Concurrent
 import           Control.Monad
 import           Control.Monad.IO.Class
 import           Data.IORef
-import           Data.Kind                     (Type)
 import           Data.List
 import           Data.Sequence                 ((|>))
 import qualified Data.Sequence                 as S
@@ -140,7 +140,7 @@ common App {..} m getView = do
           liftIO (atomicWriteIORef viewRef newVTree)
         syncPoint
         loop newModel
-  loop m
+  loop (AnyModel m)
 
 -- | Runs an isomorphic miso application.
 -- Assumes the pre-rendered DOM is already present
@@ -172,16 +172,16 @@ startApp :: Eq (model action) => App model action -> JSM ()
 startApp app@App {..} =
   common app model $ \writeEvent -> do
     let initialView = view model
-    initialVTree <- flip runView writeEvent initialView
-    (diff mountPoint) Nothing (Just initialVTree)
+    initialVTree <- runView initialView writeEvent
+    diff mountPoint Nothing (Just initialVTree)
     liftIO (newIORef initialVTree)
 
 -- | Helper
 foldEffects
   :: Sink action
-  -> (model -> action -> Effect action model)
-  -> Acc model -> action -> Acc model
-foldEffects snk update = \(Acc model as) action ->
+  -> (AnyModel model -> action -> Effect action (AnyModel model))
+  -> Acc (AnyModel model) -> action -> Acc (AnyModel model)
+foldEffects snk update (Acc model as) action =
   case update model action of
     Effect newModel effs -> Acc newModel newAs
       where
