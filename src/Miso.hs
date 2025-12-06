@@ -29,9 +29,9 @@ module Miso
   , module Miso.Event
   , module Miso.Html
   , module Miso.Subscription
-#ifndef ghcjs_HOST_OS
+
   , module Miso.TypeLevel
-#endif
+
   , module Miso.Types
   , module Miso.Router
   , module Miso.Util
@@ -42,6 +42,7 @@ module Miso
 import           Control.Concurrent
 import           Control.Monad
 import           Control.Monad.IO.Class
+import           Data.Dynamic
 import           Data.IORef
 import           Data.List
 import           Data.Sequence                 ((|>))
@@ -100,12 +101,12 @@ common App {..} m getView = do
   -- init Notifier
   Notify {..} <- liftIO newNotify
   -- init empty actions
-  actionsRef <- liftIO (newIORef S.empty) -- TODO: Dynamics
+  actionsRef <- liftIO (newIORef (S.empty :: S.Seq Dynamic))
   let writeEvent a = void . liftIO . forkIO $ do
-        atomicModifyIORef' actionsRef $ \as -> (as |> a, ())
+        atomicModifyIORef' actionsRef $ \as -> (as |> toDyn a, ())
         notify
   -- init global sink
-  liftIO (writeIORef sinkRef writeEvent)
+  liftIO (writeIORef (sinkRef :: IORef (Sink action)) writeEvent)
   -- init Subs
   forM_ subs $ \sub ->
     sub writeEvent
@@ -190,17 +191,19 @@ startApp app@App {..} =
 
 -- | Helper
 foldEffects
-  :: (Typeable model, Typeable action) => Sink action
+  :: forall model action. (Typeable model, Typeable action) => Sink action
   -> (model action -> action -> Effect action (AnyModel model))
   -> Acc (AnyModel model) -> action -> Acc (AnyModel model)
-foldEffects snk update (Acc model as) action =
-  case concreteModel model of
-    Nothing -> Acc model as
-    Just m ->
-      case update m action of
-        Effect newModel effs -> Acc newModel newAs
-          where
-            newAs = as >> do
-              forM_ effs $ \eff -> forkJSM (eff snk)
+foldEffects snk update (Acc anyModel as) action =
+  case anyModel of
+    AnyModel model ->
+      case gcast model :: Maybe (model action) of
+        Nothing -> Acc anyModel as
+        Just m ->
+          case update m action of
+            Effect newModel effs -> Acc newModel newAs
+              where
+                newAs = as >> do
+                  forM_ effs $ \eff -> forkJSM (eff snk)
 
 data Acc model = Acc !model !(JSM ())
