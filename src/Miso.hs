@@ -6,7 +6,6 @@
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE KindSignatures      #-}
 {-# LANGUAGE RankNTypes          #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 
 #ifdef IOS
 #else
@@ -82,7 +81,7 @@ import           Miso.WebSocket
 
 -- | Helper function to abstract out common functionality between `startApp` and `miso`
 common
-  :: forall model action. (Typeable model, Typeable action, Eq (model action), Eq action) => Eq (model action) -- TODO: warum explizit eingeführt (scoped type variables)?
+  :: forall model action. (Typeable action, Eq (model action)) -- TODO: warum explizit eingeführt (scoped type variables)?
   => App model action
   -> model action
   -> (Sink action -> JSM (IORef VTree))
@@ -157,7 +156,7 @@ eqModel m1 m2 = case gcast m2 :: Maybe (m a1) of
 
 -- | Runs an isomorphic miso application.
 -- Assumes the pre-rendered DOM is already present
-miso :: (Typeable model, Typeable action, Eq (model action), Eq action) => (URI -> App model action) -> JSM ()
+miso :: (Typeable action, Eq (model action)) => (URI -> App model action) -> JSM ()
 miso f = do
   app@App {..} <- f <$> getCurrentURI
   common app model $ \writeEvent -> do
@@ -181,7 +180,7 @@ sink :: Sink action
 sink = unsafePerformIO (readIORef sinkRef)
 
 -- | Runs a miso application
-startApp :: (Typeable model, Typeable action, Eq (model action), Eq action) => App model action -> JSM ()
+startApp :: (Typeable action, Eq (model action)) => App model action -> JSM ()
 startApp app@App {..} =
   common app model $ \writeEvent -> do
     let initialView = view model
@@ -191,7 +190,8 @@ startApp app@App {..} =
 
 -- | Helper
 foldEffects
-  :: forall model action. (Typeable model, Typeable action) => Sink action
+  :: forall model action. (Typeable action)
+  => Sink action
   -> (model action -> action -> Effect action (AnyModel model))
   -> Acc (AnyModel model) -> action -> Acc (AnyModel model)
 foldEffects snk update (Acc anyModel as) action =
