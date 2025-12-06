@@ -6,6 +6,7 @@
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE KindSignatures      #-}
 {-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 #ifdef IOS
 #else
@@ -45,6 +46,7 @@ import           Data.IORef
 import           Data.List
 import           Data.Sequence                 ((|>))
 import qualified Data.Sequence                 as S
+import           Data.Typeable
 import qualified JavaScript.Object.Internal    as OI
 import           System.IO.Unsafe
 import           System.Mem.StableName
@@ -79,7 +81,7 @@ import           Miso.WebSocket
 
 -- | Helper function to abstract out common functionality between `startApp` and `miso`
 common
-  :: Eq (model action)
+  :: forall model action. (Typeable model, Typeable action, Eq (model action), Eq action) => Eq (model action) -- TODO: warum explizit eingeführt (scoped type variables)?
   => App model action
   -> model action
   -> (Sink action -> JSM (IORef VTree))
@@ -98,7 +100,7 @@ common App {..} m getView = do
   -- init Notifier
   Notify {..} <- liftIO newNotify
   -- init empty actions
-  actionsRef <- liftIO (newIORef S.empty)
+  actionsRef <- liftIO (newIORef S.empty) -- TODO: Dynamics
   let writeEvent a = void . liftIO . forkIO $ do
         atomicModifyIORef' actionsRef $ \as -> (as |> a, ())
         notify
@@ -122,34 +124,44 @@ common App {..} m getView = do
   -- Program loop, blocking on SkipChan
 
   let
+    loop :: forall action'. (Typeable action', Eq (model action')) => model action' -> JSM ()
     loop !oldModel = liftIO wait >> do
         -- Apply actions to model
         actions <- liftIO $ atomicModifyIORef' actionsRef $ \actions -> (S.empty, actions)
-        let (Acc newModel effects) = foldl' (foldEffects writeEvent update)
-                                            (Acc oldModel (pure ())) actions
-        effects
-        oldName <- liftIO $ oldModel `seq` makeStableName oldModel
-        newName <- liftIO $ newModel `seq` makeStableName newModel
-        when (oldName /= newName && oldModel /= newModel) $ do
-          swapCallbacks
-          newVTree <- runView (view newModel) writeEvent
-          oldVTree <- liftIO (readIORef viewRef)
-          void $ waitForAnimationFrame
-          (diff mountPoint) (Just oldVTree) (Just newVTree)
-          releaseCallbacks
-          liftIO (atomicWriteIORef viewRef newVTree)
-        syncPoint
-        loop newModel
-  loop (AnyModel m)
+        -- let (Acc anyNewModel effects) = foldl' (foldEffects writeEvent update)
+        --                                     (Acc (AnyModel oldModel) (pure ())) actions
+        case foldl' (foldEffects writeEvent update)
+                    (Acc (AnyModel oldModel) (pure ())) actions of
+          (Acc (AnyModel newModel) effects) -> do -- TODO: let vs case bei existenziellen Typen
+
+            effects
+            oldName <- liftIO $ oldModel `seq` makeStableName oldModel
+            newName <- liftIO $ newModel `seq` makeStableName newModel
+            when ({- oldName /= newName && -} eqModel oldModel newModel) $ do
+              swapCallbacks
+              oldVTree <- liftIO (readIORef viewRef)
+              newVTree <- runView (view newModel) writeEvent
+              void waitForAnimationFrame
+              diff mountPoint (Just oldVTree) (Just newVTree)
+              releaseCallbacks
+              liftIO (atomicWriteIORef viewRef newVTree)
+            syncPoint
+            loop newModel
+  loop m
+
+eqModel :: forall m a1 a2. (Typeable a1, Typeable a2, Eq (m a1)) => m a1 -> m a2 -> Bool
+eqModel m1 m2 = case gcast m2 :: Maybe (m a1) of
+  Just m2' -> m1 == m2'
+  Nothing  -> False
 
 -- | Runs an isomorphic miso application.
 -- Assumes the pre-rendered DOM is already present
-miso :: Eq (model action) => (URI -> App model action) -> JSM ()
+miso :: (Typeable model, Typeable action, Eq (model action), Eq action) => (URI -> App model action) -> JSM ()
 miso f = do
   app@App {..} <- f <$> getCurrentURI
   common app model $ \writeEvent -> do
     let initialView = view model
-    VTree (OI.Object iv) <- flip runView writeEvent initialView
+    VTree (OI.Object iv) <- runView initialView writeEvent
     mountEl <- mountElement mountPoint
     -- Initial diff can be bypassed, just copy DOM into VTree
     copyDOMIntoVTree (logLevel == DebugPrerender) mountEl iv
@@ -168,7 +180,7 @@ sink :: Sink action
 sink = unsafePerformIO (readIORef sinkRef)
 
 -- | Runs a miso application
-startApp :: Eq (model action) => App model action -> JSM ()
+startApp :: (Typeable model, Typeable action, Eq (model action), Eq action) => App model action -> JSM ()
 startApp app@App {..} =
   common app model $ \writeEvent -> do
     let initialView = view model
@@ -178,14 +190,17 @@ startApp app@App {..} =
 
 -- | Helper
 foldEffects
-  :: Sink action
-  -> (AnyModel model -> action -> Effect action (AnyModel model))
+  :: (Typeable model, Typeable action) => Sink action
+  -> (model action -> action -> Effect action (AnyModel model))
   -> Acc (AnyModel model) -> action -> Acc (AnyModel model)
 foldEffects snk update (Acc model as) action =
-  case update model action of
-    Effect newModel effs -> Acc newModel newAs
-      where
-        newAs = as >> do
-          forM_ effs $ \eff -> forkJSM (eff snk)
+  case concreteModel model of
+    Nothing -> Acc model as
+    Just m ->
+      case update m action of
+        Effect newModel effs -> Acc newModel newAs
+          where
+            newAs = as >> do
+              forM_ effs $ \eff -> forkJSM (eff snk)
 
 data Acc model = Acc !model !(JSM ())

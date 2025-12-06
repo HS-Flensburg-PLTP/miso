@@ -14,6 +14,7 @@
 module Miso.Types
   ( App (..)
   , AnyModel (..)
+  , concreteModel
   , LogLevel (..)
   , Effect
   , Sub
@@ -36,6 +37,7 @@ import           Control.Monad.Trans.Writer.Strict (WriterT(WriterT), Writer, ru
 import           Data.Bifunctor (second)
 import           Data.Foldable (for_)
 import qualified Data.Map as M
+import           Data.Typeable
 import           Miso.Effect
 import           Miso.FFI (JSM)
 import           Miso.Html.Types (View)
@@ -66,6 +68,21 @@ data App model currentModelAction = App
 -- | A wrapper to hold any model type
 data AnyModel m where
   AnyModel :: m a -> AnyModel m
+
+-- instance Eq (AnyModel m) where
+--   (AnyModel m1) == (AnyModel m2) =
+--     let actualModel1 = concreteModel (AnyModel m1)
+--         actualModel2 = concreteModel (AnyModel m2)
+--         equalType = typeOf actualModel1 == typeOf actualModel2
+--     in case (actualModel1, actualModel2) of
+--          (Just am1, Just am2) -> case cast (am1 :: am2) of
+--                                    Just am2' -> am1 == am2'
+--                                    Nothing   -> False
+--          _                    -> False
+
+-- | Attempt to cast an 'AnyModel' back to its concrete type
+concreteModel :: (Typeable m, Typeable a) => AnyModel m -> Maybe (m a)
+concreteModel (AnyModel m) = gcast m
 
 -- | Optional Logging for debugging miso internals (useful to see if prerendering is successful)
 data LogLevel
