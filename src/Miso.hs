@@ -71,6 +71,7 @@ import           Miso.Event
 import           Miso.FFI
 import           Miso.Html
 import           Miso.Router
+import           Miso.String (ms)
 import           Miso.Subscription
 #ifndef ghcjs_HOST_OS
 import           Miso.TypeLevel
@@ -122,22 +123,22 @@ common App {..} m getView = do
   -- Process initial action of application
   writeEvent initialAction
   -- Program loop, blocking on SkipChan
-
+  _ <- consoleLog (ms "start")
   let
     loop :: forall action'. (Typeable action', Eq (model action')) => model action' -> JSM ()
-    loop !oldModel = liftIO wait >> do
+    loop oldModel = liftIO wait >> do
         -- Apply actions to model
         actions <- liftIO $ atomicModifyIORef' actionsRef $ \actions -> (S.empty, actions)
-        -- let (Acc anyNewModel effects) = foldl' (foldEffects writeEvent update)
-        --                                     (Acc (AnyModel oldModel) (pure ())) actions
+        _ <- consoleLog (ms ("actions: " ++ show (length actions)))
         case foldl' (foldEffects writeEvent update)
-                    (Acc (AnyModel oldModel) (pure ())) actions of
-          (Acc (AnyModel newModel) effects) -> do -- TODO: let vs case bei existenziellen Typen
-
+                    (Acc (AnyModel oldModel) (pure ()))
+                    actions of
+          (Acc (AnyModel newModel) effects) -> do
             effects
-            oldName <- liftIO $ oldModel `seq` makeStableName oldModel
-            newName <- liftIO $ newModel `seq` makeStableName newModel
-            when ({- oldName /= newName && -} eqModel oldModel newModel) $ do
+            -- oldName <- liftIO $ oldModel `seq` makeStableName oldModel
+            -- newName <- liftIO $ newModel `seq` makeStableName newModel
+            when ({- oldName /= newName && -} not (eqModel oldModel newModel)) $ do
+              _ <- consoleLog (ms "update dom")
               swapCallbacks
               oldVTree <- liftIO (readIORef viewRef)
               newVTree <- runView (view newModel) writeEvent
