@@ -125,6 +125,9 @@ viewModel x =
             onClick ConfirmClass
           ]
           [ text "Confirm Class" ]
+        , span_
+          []
+          [ text (ms (show (Prelude.length (_class char)) ++ " chars"))]
         ]
       CharacterInCreation char ->
         [ h1_
