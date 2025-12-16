@@ -89,18 +89,16 @@ main = runApp $ startApp App {..}
 
 -- | Updates model, optionally introduces side effects
 updateModel :: Model action -> action -> Effect action (AnyModel Model)
-updateModel (NewCharacter char) a = noEff (case a of
-    SetClass cls -> AnyModel (NewCharacter (char { _class = cls }))
-    ConfirmClass -> AnyModel (CharacterInCreation (FullCharacter { _selectedClass = _class char
-                                                                 , _strength      = 5
-                                                                 }))
-    )
-updateModel (CharacterInCreation char)  a = noEff (case a of
-    IncrementStrength -> AnyModel (CharacterInCreation (char { _strength = _strength char + 1 }))
-    DecrementStrength -> AnyModel (CharacterInCreation (char { _strength = _strength char - 1 }))
-    FinalizeCharacter -> AnyModel (CreatedCharacter char)
-    )
-updateModel (CreatedCharacter char) a = noEff (case a of)
+updateModel (NewCharacter char) a = noEff $ case a of
+    SetClass cls -> AnyModel $ NewCharacter $ char { _class = cls }
+    ConfirmClass -> AnyModel $ CharacterInCreation $ FullCharacter { _selectedClass = _class char
+                                                                   , _strength      = 5
+                                                                   }
+updateModel (CharacterInCreation char)  a = noEff $ case a of
+    IncrementStrength -> AnyModel $ CharacterInCreation $ char { _strength = _strength char + 1 }
+    DecrementStrength -> AnyModel $ CharacterInCreation $ char { _strength = _strength char - 1 }
+    FinalizeCharacter -> AnyModel $ CreatedCharacter char
+updateModel (CreatedCharacter char) a = noEff $ case a of
 
 -- | Constructs a virtual DOM from a model
 viewModel :: Model action -> View action
