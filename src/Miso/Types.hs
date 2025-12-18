@@ -66,7 +66,7 @@ data App model currentModelAction = App
 
 -- | A wrapper to hold any model type
 data AnyModel m where
-  AnyModel :: (Typeable a, Eq (m a)) => m a -> AnyModel m
+  AnyModel :: (Typeable a, Eq (m a), Show (m a), Show a) => m a -> AnyModel m
 
 -- instance Eq (AnyModel m) where
 --   (AnyModel m1) == (AnyModel m2) =

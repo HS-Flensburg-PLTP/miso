@@ -43,10 +43,10 @@ import           Control.Monad
 import           Control.Monad.IO.Class
 import           Data.Dynamic
 import           Data.IORef
-import           Data.List
-import           Data.Sequence                 ((|>))
+import           Data.Sequence                 ((|>), Seq((:<|)))
 import qualified Data.Sequence                 as S
 import           Data.Typeable
+import           Debug.Trace                   (trace)
 import qualified JavaScript.Object.Internal    as OI
 import           System.IO.Unsafe
 import           System.Mem.StableName
@@ -82,7 +82,7 @@ import           Miso.WebSocket
 
 -- | Helper function to abstract out common functionality between `startApp` and `miso`
 common
-  :: forall model action. (Typeable action, Eq (model action)) -- TODO: warum explizit eingeführt (scoped type variables)?
+  :: forall model action. (Typeable action, Eq (model action), Show (model action), Show action) -- TODO: warum explizit eingeführt (scoped type variables)?
   => App model action
   -> model action
   -> (Sink action -> JSM (IORef VTree))
@@ -101,7 +101,7 @@ common App {..} m getView = do
   -- init Notifier
   Notify {..} <- liftIO newNotify
   -- init empty actions
-  actionsRef <- liftIO (newIORef (S.empty :: S.Seq Dynamic))
+  actionsRef <- liftIO (newIORef (S.empty :: S.Seq (Dynamic)))
   let writeEvent a = void . liftIO . forkIO $ do
         atomicModifyIORef' actionsRef $ \as -> (as |> toDyn a, ())
         notify
@@ -125,15 +125,17 @@ common App {..} m getView = do
   -- Program loop, blocking on SkipChan
   _ <- consoleLog (ms "start")
   let
-    loop :: forall action'. (Typeable action', Eq (model action')) => model action' -> JSM ()
+    loop :: forall action'. (Typeable action', Eq (model action'), Show (model action'), Show action') => model action' -> JSM ()
     loop oldModel = liftIO wait >> do
         -- Apply actions to model
         actions <- liftIO $ atomicModifyIORef' actionsRef $ \actions -> (S.empty, actions)
         _ <- consoleLog (ms ("actions: " ++ show (length actions)))
-        case foldl' (foldEffects writeEvent update)
-                    (Acc (AnyModel oldModel) (pure ()))
-                    actions of
-          (Acc (AnyModel newModel) effects) -> do
+        _ <- consoleLog (ms $ show oldModel)
+        let typedActions = fmap fromDynamic actions :: S.Seq (Maybe action')
+        case applyActions writeEvent update oldModel (pure ()) typedActions of -- alle Actions müssen vom gleichen (vom Modelltyp abhängigen) Action-Typ sein, da nur diese im aktuellen Modellzustand ausgeführt werden dürften
+          (AnyModel newModel, effects) -> do
+            _ <- consoleLog (ms "handle new model")
+            _ <- consoleLog (ms $ show newModel)
             effects
             -- oldName <- liftIO $ oldModel `seq` makeStableName oldModel
             -- newName <- liftIO $ newModel `seq` makeStableName newModel
@@ -157,7 +159,7 @@ eqModel m1 m2 = case gcast m2 :: Maybe (m a1) of
 
 -- | Runs an isomorphic miso application.
 -- Assumes the pre-rendered DOM is already present
-miso :: (Typeable action, Eq (model action)) => (URI -> App model action) -> JSM ()
+miso :: (Typeable action, Eq (model action), Show (model action), Show action) => (URI -> App model action) -> JSM ()
 miso f = do
   app@App {..} <- f <$> getCurrentURI
   common app model $ \writeEvent -> do
@@ -181,7 +183,7 @@ sink :: Sink action
 sink = unsafePerformIO (readIORef sinkRef)
 
 -- | Runs a miso application
-startApp :: (Typeable action, Eq (model action)) => App model action -> JSM ()
+startApp :: (Typeable action, Eq (model action), Show (model action), Show action) => App model action -> JSM ()
 startApp app@App {..} =
   common app model $ \writeEvent -> do
     let initialView = view model
@@ -190,21 +192,27 @@ startApp app@App {..} =
     liftIO (newIORef initialVTree)
 
 -- | Helper
-foldEffects
-  :: forall model action. (Typeable action)
+applyActions
+  :: forall model action. (Typeable action, Eq (model action), Show (model action), Show action)
   => Sink action
   -> (model action -> action -> Effect action (AnyModel model))
-  -> Acc (AnyModel model) -> action -> Acc (AnyModel model)
-foldEffects snk update (Acc anyModel as) action =
-  case anyModel of
-    AnyModel model ->
-      case gcast model :: Maybe (model action) of
-        Nothing -> Acc anyModel as
-        Just m ->
-          case update m action of
-            Effect newModel effs -> Acc newModel newAs
-              where
-                newAs = as >> do
-                  forM_ effs $ \eff -> forkJSM (eff snk)
-
-data Acc model = Acc !model !(JSM ())
+  -> model action
+  -> JSM ()
+  -> S.Seq (Maybe action)
+  -> (AnyModel model, JSM ())
+applyActions _   _      m ctx S.Empty    = (AnyModel m, ctx)
+applyActions snk update m ctx (a :<| as) = case a of
+  Nothing -> trace "An action could not be cast from Dynamic" (AnyModel m, ctx)
+  Just a' -> case update m a' of
+    Effect (AnyModel newModel) effs ->
+      -- check if model action type is the same as the old model
+      case gcast newModel :: Maybe (model action) of -- forall model action. needed for this
+        -- continue working through list of actions if same
+        Just newModel' -> applyActions snk update newModel' newCtx as
+        -- ignore other actions if new model does not allow that action type
+        Nothing -> trace ("An action" ++ show a' ++ " did not match the type of allowed actions by model " ++ show m)
+                         (AnyModel newModel, ctx)
+      where
+        newCtx = ctx >> do
+          -- apply subscriptions in new threads
+          forM_ effs $ \eff -> forkJSM (eff snk)
