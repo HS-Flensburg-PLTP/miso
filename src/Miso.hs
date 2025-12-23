@@ -101,7 +101,7 @@ common App {..} m getView = do
   -- init Notifier
   Notify {..} <- liftIO newNotify
   -- init empty actions
-  actionsRef <- liftIO (newIORef (S.empty :: S.Seq (Dynamic)))
+  actionsRef <- liftIO (newIORef (S.empty :: S.Seq Dynamic))
   let writeEvent a = void . liftIO . forkIO $ do
         atomicModifyIORef' actionsRef $ \as -> (as |> toDyn a, ())
         notify
