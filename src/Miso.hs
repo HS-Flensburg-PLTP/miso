@@ -132,14 +132,15 @@ common App {..} m getView = do
         _ <- consoleLog (ms ("actions: " ++ show (length actions)))
         _ <- consoleLog (ms $ show oldModel)
         let typedActions = fmap fromDynamic actions :: S.Seq (Maybe action')
-        case applyActions writeEvent update oldModel (pure ()) typedActions of -- alle Actions müssen vom gleichen (vom Modelltyp abhängigen) Action-Typ sein, da nur diese im aktuellen Modellzustand ausgeführt werden dürften
-          (AnyModel newModel, effects) -> do
+        let (anyNewModel, effects) = applyActions writeEvent update oldModel (pure ()) typedActions -- alle Actions müssen vom gleichen (vom Modelltyp abhängigen) Action-Typ sein, da nur diese im aktuellen Modellzustand ausgeführt werden dürfen
+        case anyNewModel of
+          AnyModel newModel -> do
             _ <- consoleLog (ms "handle new model")
             _ <- consoleLog (ms $ show newModel)
             effects
-            -- oldName <- liftIO $ oldModel `seq` makeStableName oldModel
-            -- newName <- liftIO $ newModel `seq` makeStableName newModel
-            when ({- oldName /= newName && -} not (eqModel oldModel newModel)) $ do
+            oldName <- liftIO $ oldModel `seq` makeStableName (AnyModel oldModel)
+            newName <- liftIO $ newModel `seq` makeStableName anyNewModel
+            when (oldName /= newName && not (eqModel oldModel newModel)) $ do
               _ <- consoleLog (ms "update dom")
               swapCallbacks
               oldVTree <- liftIO (readIORef viewRef)
