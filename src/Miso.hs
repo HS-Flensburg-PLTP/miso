@@ -82,7 +82,7 @@ import           Miso.WebSocket
 
 -- | Helper function to abstract out common functionality between `startApp` and `miso`
 common
-  :: forall model action. (Typeable action, Eq (model action), Show (model action), Show action) -- TODO: warum explizit eingeführt (scoped type variables)?
+  :: forall model action. (Typeable action, Eq (model action), Show (model action), Show action) -- warum forall: model wird in loop benötigt, action wird für den globalen Sink benötigt
   => App model action
   -> model action
   -> (Sink action -> JSM (IORef VTree))
