@@ -138,8 +138,9 @@ common App {..} m getView = do
             _ <- consoleLog (ms "handle new model")
             _ <- consoleLog (ms $ show newModel)
             effects
-            oldName <- liftIO $ oldModel `seq` makeStableName (AnyModel oldModel)
-            newName <- liftIO $ newModel `seq` makeStableName anyNewModel
+            let anyOldModel = AnyModel oldModel
+            oldName <- liftIO $ makeStableName $! anyOldModel
+            newName <- liftIO $ makeStableName $! anyNewModel
             when (oldName /= newName && not (eqModel oldModel newModel)) $ do
               _ <- consoleLog (ms "update dom")
               swapCallbacks
