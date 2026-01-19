@@ -35,7 +35,7 @@ import Miso.Effect.DOM
 -- It consists of the updated model and a list of subscriptions. Each 'Sub' is
 -- run in a new thread so there is no risk of accidentally blocking the
 -- application.
-data Effect action model = Effect model [Sub action]
+data Effect action anyModel = Effect anyModel [Sub action]
 
 -- | Type synonym for constructing event subscriptions.
 --
