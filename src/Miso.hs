@@ -182,6 +182,7 @@ sinkRef = unsafePerformIO $ newIORef (\_ -> pure ())
 -- Meant for usage in long running IO actions, or custom callbacks
 -- Good for integrating with third-party components.
 sink :: Sink action
+{-# NOINLINE sink #-}
 sink = unsafePerformIO (readIORef sinkRef)
 
 -- | Runs a miso application
