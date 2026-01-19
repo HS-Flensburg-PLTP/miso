@@ -126,7 +126,7 @@ common App {..} m getView = do
   _ <- consoleLog (ms "start")
   let
     loop :: forall action'. (Typeable action', Eq (model action'), Show (model action'), Show action') => model action' -> JSM ()
-    loop oldModel = liftIO wait >> do
+    loop !oldModel = liftIO wait >> do
         -- Apply actions to model
         actions <- liftIO $ atomicModifyIORef' actionsRef $ \actions -> (S.empty, actions)
         _ <- consoleLog (ms ("actions: " ++ show (length actions)))
@@ -203,7 +203,7 @@ applyActions
   -> S.Seq (Maybe action)
   -> (AnyModel model, JSM ())
 applyActions _   _      m ctx S.Empty    = (AnyModel m, ctx)
-applyActions snk update m ctx (a :<| as) = case a of
+applyActions snk update !m !ctx (a :<| as) = case a of
   Nothing -> trace "An action could not be cast from Dynamic" (AnyModel m, ctx)
   Just a' -> case update m a' of
     Effect (AnyModel newModel) effs ->
