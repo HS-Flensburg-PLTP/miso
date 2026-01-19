@@ -1,11 +1,11 @@
 {-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE CPP                 #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE LambdaCase          #-}
-{-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE KindSignatures      #-}
+{-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 #ifdef IOS
 #else
@@ -43,7 +43,7 @@ import           Control.Monad
 import           Control.Monad.IO.Class
 import           Data.Dynamic
 import           Data.IORef
-import           Data.Sequence                 ((|>), Seq((:<|)))
+import           Data.Sequence                 (Seq ((:<|)), (|>))
 import qualified Data.Sequence                 as S
 import           Data.Typeable
 import           Debug.Trace                   (trace)
@@ -56,8 +56,8 @@ import           Language.Javascript.JSaddle   (eval, waitForAnimationFrame)
 #ifdef IOS
 import           Miso.JSBits
 #else
-import           GHCJS.Types                   (JSString)
 import           Data.FileEmbed
+import           GHCJS.Types                   (JSString)
 #endif
 #else
 import           JavaScript.Web.AnimationFrame
@@ -71,7 +71,7 @@ import           Miso.Event
 import           Miso.FFI
 import           Miso.Html
 import           Miso.Router
-import           Miso.String (ms)
+import           Miso.String                   (ms)
 import           Miso.Subscription
 #ifndef ghcjs_HOST_OS
 import           Miso.TypeLevel
