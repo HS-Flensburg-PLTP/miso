@@ -46,7 +46,7 @@ import           Data.Typeable
 data App model currentModelAction = App
   { model :: model currentModelAction
   -- ^ initial model
-  , update :: forall action. model action -> action -> Effect action (AnyModel model)
+  , update :: forall action. model action -> action -> AnyEffect model
   -- ^ Function to update model, optionally providing effects.
   --   See the 'Transition' monad for succinctly expressing model transitions.
   , view :: forall action. model action -> View action
@@ -128,14 +128,14 @@ mapAction = mapStateT . mapWriter . second . fmap . mapSub
 
 -- | Convert a @Transition@ computation to a function that can be given to 'update'.
 fromTransition
-    :: Transition action model ()
-    -> (model -> Effect action model) -- ^ model 'update' function.
+    :: Transition action (model action) ()
+    -> (model action -> Effect action model) -- ^ model 'update' function.
 fromTransition act = uncurry Effect . runWriter . execStateT act
 
 -- | Convert an 'update' function to a @Transition@ computation.
 toTransition
-    :: (model -> Effect action model) -- ^ model 'update' function
-    -> Transition action model ()
+    :: (model action -> Effect action model) -- ^ model 'update' function
+    -> Transition action (model action) ()
 toTransition f = StateT $ \s ->
                    let Effect s' ios = f s
                    in WriterT $ pure (((), s'), ios)

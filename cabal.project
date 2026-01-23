@@ -2,3 +2,4 @@ packages:
   .
   static-guarantees-sample-app/
   static-guarantees-sample-app-2/
+  static-guarantees-sample-app-http/

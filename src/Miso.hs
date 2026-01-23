@@ -197,8 +197,8 @@ startApp app@App {..} =
 -- | Helper
 applyActions
   :: forall model action. (Typeable action, Eq (model action), Show (model action), Show action)
-  => Sink action
-  -> (model action -> action -> Effect action (AnyModel model))
+  => (forall action'. Typeable action' => Sink action')
+  -> (model action -> action -> AnyEffect model)
   -> model action
   -> JSM ()
   -> S.Seq (Maybe action)
@@ -207,14 +207,16 @@ applyActions _   _      m ctx S.Empty    = (AnyModel m, ctx)
 applyActions snk update !m !ctx (a :<| as) = case a of
   Nothing -> trace "An action could not be cast from Dynamic" (AnyModel m, ctx)
   Just a' -> case update m a' of
-    Effect (AnyModel newModel) effs ->
+    AnyEffect (Effect newModel effs) ->
       -- check if model action type is the same as the old model
       case gcast newModel :: Maybe (model action) of -- forall model action. needed for this
         -- continue working through list of actions if same
         Just newModel' -> applyActions snk update newModel' newCtx as
         -- ignore other actions if new model does not allow that action type
-        Nothing -> trace ("An action" ++ show a' ++ " did not match the type of allowed actions by model " ++ show m)
-                         (AnyModel newModel, ctx)
+        Nothing -> if not (null as)
+                   then trace ("Actions " ++ show as ++ " do not match the type of allowed actions by model " ++ show newModel)
+                              (AnyModel newModel, newCtx)
+                   else (AnyModel newModel, newCtx)
       where
         newCtx = ctx >> do
           -- apply subscriptions in new threads
